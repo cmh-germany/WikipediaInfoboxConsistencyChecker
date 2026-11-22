@@ -68,6 +68,9 @@ def test_death_date_with_non_deceased_status_is_flagged():
     findings = check(params)
     assert "death_date_with_non_deceased_status" in finding_ids(findings)
     finding = finding_by_id(findings, "death_date_with_non_deceased_status")
+    # Low, not high: Vorlage:Status Sportler renders "verstorben" from
+    # sterbedatum anyway, so the stale status has no visible impact.
+    assert finding.severity == "low"
     # The rendering-consequence aside lives in `note`, not appended to
     # `message` (issue #2), so message stays the short core fact.
     assert "Vorlage:Status Sportler" not in finding.message
@@ -78,7 +81,9 @@ def test_status_deceased_without_death_date_is_flagged():
     params = {"status": "v"}
     findings = check(params)
     assert "status_deceased_without_death_date" in finding_ids(findings)
-    assert findings[0].severity == "very high"
+    # High, not very high: a confirmed death with a genuinely unknown
+    # date is possible, so this isn't a logical contradiction.
+    assert findings[0].severity == "high"
     assert findings[0].note is None
 
 
@@ -205,7 +210,11 @@ def test_national_squad_before_birth_is_flagged():
 
 def test_national_squad_implausibly_young_is_flagged():
     params = {"geburtstag": "2000-01-01", "nationalkader": "2005"}
-    assert "national_squad_implausibly_young" in finding_ids(check(params))
+    findings = check(params)
+    assert "national_squad_implausibly_young" in finding_ids(findings)
+    assert finding_by_id(findings, "national_squad_implausibly_young").severity == (
+        "low"
+    )
 
 
 def test_national_squad_plausible_real_mihambo_no_finding(mihambo_params):
@@ -222,7 +231,16 @@ def test_national_squad_plausible_real_mihambo_no_finding(mihambo_params):
 
 def test_height_comma_format_is_flagged():
     params = {"groesse": "1,95"}
-    assert "height_comma_format" in finding_ids(check(params))
+    findings = check(params)
+    assert "height_comma_format" in finding_ids(findings)
+    assert finding_by_id(findings, "height_comma_format").severity == "very high"
+
+
+def test_weight_comma_format_is_flagged():
+    params = {"gewicht": "72,5"}
+    findings = check(params)
+    assert "weight_comma_format" in finding_ids(findings)
+    assert finding_by_id(findings, "weight_comma_format").severity == "very high"
 
 
 def test_weight_not_numeric_is_flagged():
@@ -232,12 +250,16 @@ def test_weight_not_numeric_is_flagged():
 
 def test_height_implausible_too_short_is_flagged():
     params = {"groesse": "50"}
-    assert "height_implausible" in finding_ids(check(params))
+    findings = check(params)
+    assert "height_implausible" in finding_ids(findings)
+    assert finding_by_id(findings, "height_implausible").severity == "high"
 
 
 def test_weight_implausible_too_heavy_is_flagged():
     params = {"gewicht": "400"}
-    assert "weight_implausible" in finding_ids(check(params))
+    findings = check(params)
+    assert "weight_implausible" in finding_ids(findings)
+    assert finding_by_id(findings, "weight_implausible").severity == "high"
 
 
 def test_height_huge_digit_run_does_not_crash():
@@ -283,6 +305,7 @@ def test_nation_unknown_code_is_flagged():
     findings = check(params, nation_exists={"Vorlage:ZZZ": False})
     assert "nation_code_unknown" in finding_ids(findings)
     finding = finding_by_id(findings, "nation_code_unknown")
+    assert finding.severity == "high"
     assert "flag/country name" not in finding.message
     assert "flag/country name" in finding.note
 
@@ -325,6 +348,7 @@ def test_discipline_link_unknown_is_flagged():
     findings = check(params, discipline_exists={"Bogenschiessen": False})
     assert "discipline_link_unknown" in finding_ids(findings)
     finding = finding_by_id(findings, "discipline_link_unknown")
+    assert finding.severity == "medium"
     assert "typo" not in finding.message
     assert finding.note == "Possibly a typo."
 
@@ -402,7 +426,9 @@ def test_medal_implausibly_young_is_flagged():
         "geburtstag": "2000-01-01",
         "medaillen": "{{Medaillen Sommersport|Gold|2008 Testort|100 m}}",
     }
-    assert "medal_implausibly_young" in finding_ids(check(params))
+    findings = check(params)
+    assert "medal_implausibly_young" in finding_ids(findings)
+    assert finding_by_id(findings, "medal_implausibly_young").severity == "low"
 
 
 def test_medal_year_before_birth_typo_outside_old_extraction_window_is_flagged():
