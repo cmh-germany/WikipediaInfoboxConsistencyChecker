@@ -611,28 +611,28 @@ flagged:
 
 | Rule ID | Severity | Title |
 |---|---|---|
-| `status_deceased_without_death_date` | very high | Deceased status without a death date |
 | `invalid_status_code` | very high | Invalid status code |
 | `death_date_before_birth_date` | very high | Death date before birth date |
 | `birth_date_in_future` | very high | Birth date in the future |
 | `death_date_in_future` | very high | Death date in the future |
 | `career_end_before_birth_date` | very high | Career end before birth date |
 | `national_squad_before_birth` | very high | National squad year before birth |
-| `death_date_with_non_deceased_status` | high | Death date given despite non-deceased status |
+| `height_comma_format` / `weight_comma_format` | very high | Height/weight uses a comma instead of a plain number |
+| `status_deceased_without_death_date` | high | Deceased status without a death date |
 | `deceased_but_living_person_category` | high | Deceased but still in the living-people category |
 | `career_end_despite_active` | high | Career end given despite active status |
 | `implausible_age_at_death` | high | Implausible age at death |
 | `medal_count_mismatch` | high | Medal count mismatch |
 | `medal_before_birth` | high | Medal year before birth |
-| `national_squad_implausibly_young` | medium | Implausibly young national squad start |
-| `height_comma_format` / `weight_comma_format` | medium | Height/weight uses a comma instead of a plain number |
-| `height_implausible` / `weight_implausible` | medium | Implausible height/weight |
-| `nation_code_unknown` | medium | Unknown nation code |
-| `medal_implausibly_young` | medium | Implausibly young age at first medal |
+| `height_implausible` / `weight_implausible` | high | Implausible height/weight |
+| `nation_code_unknown` | high | Unknown nation code |
+| `discipline_link_unknown` | medium | Unknown discipline link |
+| `death_date_with_non_deceased_status` | low | Death date given despite non-deceased status |
+| `national_squad_implausibly_young` | low | Implausibly young national squad start |
+| `medal_implausibly_young` | low | Implausibly young age at first medal |
 | `status_code_spelled_out` | low | Status code spelled out instead of abbreviated |
 | `height_not_numeric` / `weight_not_numeric` | low | Height/weight is not a plain number |
 | `nation_nonstandard_format` | low | Nation field in a non-standard format |
-| `discipline_link_unknown` | low | Unknown discipline link |
 | `missing_birthplace` | low | Missing birthplace |
 | `update_outdated` | low | Outdated update despite active status |
 
