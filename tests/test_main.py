@@ -669,20 +669,20 @@ def test_run_scan_prints_severity_summary(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(
         main.fetch,
         "list_pages_using_template",
-        lambda session, limit=None: ["Dead Athlete"],
+        lambda session, limit=None: ["Retired Athlete"],
     )
     monkeypatch.setattr(
         main.fetch,
         "fetch_all_with_cache",
         lambda session, titles, use_cache=True, overwrite_cache=False: {
-            "Dead Athlete": {
-                # status='a' (active) with a death date given -- a
+            "Retired Athlete": {
+                # status='a' (active) with a career end given -- a
                 # "high" severity contradiction
-                # (death_date_with_non_deceased_status). No birthplace
+                # (career_end_despite_active). No birthplace
                 # given either, which also triggers a "low" severity
                 # missing_birthplace finding.
                 "wikitext": (
-                    "{{Infobox Leichtathlet|status=a|sterbedatum=2020-01-01}}"
+                    "{{Infobox Leichtathlet|status=a|karriereende=2020-01-01}}"
                 ),
                 "categories": [],
             }
@@ -814,11 +814,11 @@ def test_run_scan_done_line_ends_with_newline_before_next_output(
 # --fail-on: CI-friendly exit codes (issue #12)
 # ---------------------------------------------------------------------
 
-# status='a' (active) with a death date -> one "high" finding
-# (death_date_with_non_deceased_status); no birthplace -> one "low"
+# status='a' (active) with a career end -> one "high" finding
+# (career_end_despite_active); no birthplace -> one "low"
 # finding (missing_birthplace). No nation/disziplin, so run_check needs
 # no template-existence lookups (and so no network) for it.
-_HIGH_AND_LOW_WIKITEXT = "{{Infobox Leichtathlet|status=a|sterbedatum=2020-01-01}}"
+_HIGH_AND_LOW_WIKITEXT = "{{Infobox Leichtathlet|status=a|karriereende=2020-01-01}}"
 
 
 def _stub_scan_with_high_and_low_findings(monkeypatch):
@@ -826,13 +826,13 @@ def _stub_scan_with_high_and_low_findings(monkeypatch):
     monkeypatch.setattr(
         main.fetch,
         "list_pages_using_template",
-        lambda session, limit=None: ["Dead Athlete"],
+        lambda session, limit=None: ["Retired Athlete"],
     )
     monkeypatch.setattr(
         main.fetch,
         "fetch_all_with_cache",
         lambda session, titles, use_cache=True, overwrite_cache=False: {
-            "Dead Athlete": {"wikitext": _HIGH_AND_LOW_WIKITEXT, "categories": []}
+            "Retired Athlete": {"wikitext": _HIGH_AND_LOW_WIKITEXT, "categories": []}
         },
     )
     monkeypatch.setattr(main.fetch, "templates_exist", lambda session, titles: {})
@@ -977,7 +977,7 @@ def test_run_check_fail_on_still_prints_findings(tmp_path, capsys):
     path = tmp_path / "draft.wikitext"
     path.write_text(_HIGH_AND_LOW_WIKITEXT, encoding="utf-8")
     main.run_check(str(path), finding_filter=main.rules.FindingFilter(fail_on="low"))
-    assert "death_date_with_non_deceased_status" in capsys.readouterr().out
+    assert "career_end_despite_active" in capsys.readouterr().out
 
 
 def test_run_check_fail_on_hides_findings_below_threshold(tmp_path, capsys):
@@ -985,7 +985,7 @@ def test_run_check_fail_on_hides_findings_below_threshold(tmp_path, capsys):
     path.write_text(_HIGH_AND_LOW_WIKITEXT, encoding="utf-8")
     main.run_check(str(path), finding_filter=main.rules.FindingFilter(fail_on="high"))
     out = capsys.readouterr().out
-    assert "death_date_with_non_deceased_status" in out
+    assert "career_end_despite_active" in out
     assert "missing_birthplace" not in out
     assert "Total findings: 1 (Very high: 0, High: 1, Medium: 0, Low: 0)" in out
 
@@ -998,7 +998,7 @@ def test_run_check_fail_on_none_still_shows_every_finding(tmp_path, capsys):
     )
     out = capsys.readouterr().out
     assert result == main.EXIT_OK
-    assert "death_date_with_non_deceased_status" in out
+    assert "career_end_despite_active" in out
     assert "missing_birthplace" in out
 
 
@@ -1025,7 +1025,7 @@ def test_run_scan_fail_on_hides_findings_in_report_and_summary(
     out = capsys.readouterr().out
     assert "Total findings: 1 (Very high: 0, High: 1, Medium: 0, Low: 0)" in out
     report_html = output.read_text(encoding="utf-8")
-    assert _has_finding_row(report_html, "death_date_with_non_deceased_status")
+    assert _has_finding_row(report_html, "career_end_despite_active")
     assert not _has_finding_row(report_html, "missing_birthplace")
 
 
@@ -1207,7 +1207,7 @@ def test_run_check_disabled_rule_combined_with_fail_on(tmp_path, capsys):
     path = tmp_path / "draft.wikitext"
     path.write_text(_HIGH_AND_LOW_WIKITEXT, encoding="utf-8")
     finding_filter = main.rules.FindingFilter(
-        disabled_rules=frozenset({"death_date_with_non_deceased_status"}),
+        disabled_rules=frozenset({"career_end_despite_active"}),
         fail_on="medium",
     )
     assert main.run_check(str(path), finding_filter=finding_filter) == main.EXIT_OK
@@ -1218,7 +1218,7 @@ def test_run_scan_disabled_rule_is_left_out_of_report(monkeypatch, capsys, tmp_p
     _stub_scan_with_high_and_low_findings(monkeypatch)
     output = tmp_path / "report.html"
     finding_filter = main.rules.FindingFilter(
-        disabled_rules=frozenset({"death_date_with_non_deceased_status"})
+        disabled_rules=frozenset({"career_end_despite_active"})
     )
 
     result = main.run_scan(output=str(output), finding_filter=finding_filter)
@@ -1231,7 +1231,7 @@ def test_run_scan_disabled_rule_is_left_out_of_report(monkeypatch, capsys, tmp_p
     # and its "Suppress whole rules" row, just not in a finding row.
     report_html = output.read_text(encoding="utf-8")
     assert _has_finding_row(report_html, "missing_birthplace")
-    assert not _has_finding_row(report_html, "death_date_with_non_deceased_status")
+    assert not _has_finding_row(report_html, "career_end_despite_active")
 
 
 _NATION_AND_DISCIPLINE_WIKITEXT = (
@@ -1398,7 +1398,7 @@ def test_cli_check_fail_on_hides_lower_findings_from_output(tmp_path):
     path = tmp_path / "draft.wikitext"
     path.write_text(_HIGH_AND_LOW_WIKITEXT, encoding="utf-8")
     result = _run_cli("--check", str(path), "--fail-on", "high")
-    assert "death_date_with_non_deceased_status" in result.stdout
+    assert "career_end_despite_active" in result.stdout
     assert "missing_birthplace" not in result.stdout
 
 
@@ -1475,13 +1475,13 @@ def test_include_suppressed_flag_is_passed_through(monkeypatch):
 
 def test_run_check_hides_suppressed_finding_and_prints_hint(tmp_path, capsys):
     _write_suppressions(
-        {"rule_id": "death_date_with_non_deceased_status", "article": "draft.wikitext"}
+        {"rule_id": "career_end_despite_active", "article": "draft.wikitext"}
     )
 
     result = main.run_check(_high_and_low_draft(tmp_path))
 
     out = capsys.readouterr().out
-    assert "] death_date_with_non_deceased_status:" not in out
+    assert "] career_end_despite_active:" not in out
     assert "] missing_birthplace:" in out
     assert "Total findings: 1 (Very high: 0, High: 0, Medium: 0, Low: 1)" in out
     assert "1 suppressed finding(s) hidden" in out
@@ -1491,7 +1491,7 @@ def test_run_check_hides_suppressed_finding_and_prints_hint(tmp_path, capsys):
 
 def test_run_check_suppressed_findings_never_cause_exit_1(tmp_path):
     _write_suppressions(
-        {"rule_id": "death_date_with_non_deceased_status", "article": "draft.wikitext"},
+        {"rule_id": "career_end_despite_active", "article": "draft.wikitext"},
         {"rule_id": "missing_birthplace", "article": "draft.wikitext"},
     )
     assert main.run_check(_high_and_low_draft(tmp_path)) == main.EXIT_OK
@@ -1500,7 +1500,7 @@ def test_run_check_suppressed_findings_never_cause_exit_1(tmp_path):
 def test_run_check_include_suppressed_lists_them_marked(tmp_path, capsys):
     _write_suppressions(
         {
-            "rule_id": "death_date_with_non_deceased_status",
+            "rule_id": "career_end_despite_active",
             "article": "draft.wikitext",
             "reason": "known \x1b[2J case",
         },
@@ -1526,7 +1526,7 @@ def test_run_check_suppression_lapses_when_field_changes(tmp_path, capsys):
     finding = next(
         f
         for f in main.rules.run_all_checks(params)
-        if f.rule_id == "death_date_with_non_deceased_status"
+        if f.rule_id == "career_end_despite_active"
     )
     _write_suppressions(
         {
@@ -1536,13 +1536,13 @@ def test_run_check_suppression_lapses_when_field_changes(tmp_path, capsys):
         }
     )
     main.run_check(draft)
-    assert "] death_date_with_non_deceased_status:" not in capsys.readouterr().out
+    assert "] career_end_despite_active:" not in capsys.readouterr().out
 
     Path(draft).write_text(
         _HIGH_AND_LOW_WIKITEXT.replace("2020-01-01", "2021-01-01"), encoding="utf-8"
     )
     main.run_check(draft)
-    assert "] death_date_with_non_deceased_status:" in capsys.readouterr().out
+    assert "] career_end_despite_active:" in capsys.readouterr().out
 
 
 def test_run_check_whole_rule_suppression_is_not_run(monkeypatch, tmp_path, capsys):
@@ -1614,8 +1614,8 @@ def test_run_scan_moves_suppressed_findings_to_their_own_section(
     _stub_scan_with_high_and_low_findings(monkeypatch)
     _write_suppressions(
         {
-            "rule_id": "death_date_with_non_deceased_status",
-            "article": "Dead Athlete",
+            "rule_id": "career_end_despite_active",
+            "article": "Retired Athlete",
             "reason": "checked by hand",
         }
     )
@@ -1630,8 +1630,8 @@ def test_run_scan_moves_suppressed_findings_to_their_own_section(
     report_html = output.read_text(encoding="utf-8")
     main_table, suppressed_section = report_html.split('class="suppressed-section"')
     assert _has_finding_row(main_table, "missing_birthplace")
-    assert not _has_finding_row(main_table, "death_date_with_non_deceased_status")
-    assert _has_finding_row(suppressed_section, "death_date_with_non_deceased_status")
+    assert not _has_finding_row(main_table, "career_end_despite_active")
+    assert _has_finding_row(suppressed_section, "career_end_despite_active")
     assert 'value="checked by hand"' in suppressed_section
 
 
@@ -1640,7 +1640,7 @@ def test_run_scan_include_suppressed_marks_them_in_main_table(
 ):
     _stub_scan_with_high_and_low_findings(monkeypatch)
     _write_suppressions(
-        {"rule_id": "death_date_with_non_deceased_status", "article": "Dead Athlete"}
+        {"rule_id": "career_end_despite_active", "article": "Retired Athlete"}
     )
     output = tmp_path / "report.html"
     finding_filter = main.rules.FindingFilter(include_suppressed=True)
@@ -1794,7 +1794,7 @@ def test_run_check_writes_json_file(tmp_path):
     assert document["run"]["target"] == draft
     assert document["run"]["source"] == "local_file"
     assert [f["rule_id"] for f in document["findings"]] == [
-        "death_date_with_non_deceased_status",
+        "career_end_despite_active",
         "missing_birthplace",
     ]
     assert document["findings"][0]["article"] == "draft.wikitext"
@@ -1808,24 +1808,24 @@ def test_run_check_json_links_wikipedia_article(monkeypatch, tmp_path):
         main.fetch,
         "fetch_pages_content_and_categories",
         lambda session, titles: {
-            "Dead Athlete": {"wikitext": _HIGH_AND_LOW_WIKITEXT, "categories": []}
+            "Retired Athlete": {"wikitext": _HIGH_AND_LOW_WIKITEXT, "categories": []}
         },
     )
     path, json_output = _json_file(tmp_path)
 
-    main.run_check("Dead Athlete", json_output=json_output)
+    main.run_check("Retired Athlete", json_output=json_output)
 
     document = json.loads(path.read_text(encoding="utf-8"))
     assert document["run"]["source"] == "wikipedia"
     assert document["findings"][0]["article_url"] == (
-        "https://de.wikipedia.org/wiki/Dead_Athlete"
+        "https://de.wikipedia.org/wiki/Retired_Athlete"
     )
 
 
 def test_run_check_json_respects_fail_on_and_lists_suppressed(tmp_path):
     _write_suppressions(
         {
-            "rule_id": "death_date_with_non_deceased_status",
+            "rule_id": "career_end_despite_active",
             "article": "draft.wikitext",
             "reason": "checked by hand",
         }
@@ -1844,7 +1844,7 @@ def test_run_check_json_respects_fail_on_and_lists_suppressed(tmp_path):
     assert document["run"]["fail_on"] == "high"
     assert document["findings"] == []  # the low finding is filtered out
     [suppressed] = document["suppressed_findings"]
-    assert suppressed["rule_id"] == "death_date_with_non_deceased_status"
+    assert suppressed["rule_id"] == "career_end_despite_active"
     assert suppressed["suppression"] == {
         "reason": "checked by hand",
         "scope": "article",
@@ -1863,7 +1863,7 @@ def test_run_check_json_write_failure_returns_2(tmp_path, capsys):
 def test_run_scan_writes_json_file(monkeypatch, capsys, tmp_path):
     _stub_scan_with_high_and_low_findings(monkeypatch)
     _write_suppressions(
-        {"rule_id": "missing_birthplace", "article": "Dead Athlete", "reason": "r"}
+        {"rule_id": "missing_birthplace", "article": "Retired Athlete", "reason": "r"}
     )
     path, json_output = _json_file(tmp_path)
 
@@ -1878,8 +1878,8 @@ def test_run_scan_writes_json_file(monkeypatch, capsys, tmp_path):
     assert document["run"]["limit"] == 5
     assert document["articles"] == [
         {
-            "title": "Dead Athlete",
-            "url": "https://de.wikipedia.org/wiki/Dead_Athlete",
+            "title": "Retired Athlete",
+            "url": "https://de.wikipedia.org/wiki/Retired_Athlete",
             "findings": 1,
         }
     ]
