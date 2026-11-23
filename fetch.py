@@ -114,10 +114,12 @@ def _get_with_retry(session, params) -> dict[str, Any]:
                     "Wikipedia's servers are currently overloaded (maxlag) "
                     "-- please try again in a few minutes."
                 )
+        # The exponential delay is a floor even when Retry-After is given:
+        # a date that is already past (or a "0") must not turn into an
+        # immediate retry storm. throttle.back_off() caps the upper end.
         retry_after = response.headers.get("Retry-After")
-        throttle.back_off(
-            _retry_after_seconds(retry_after, delay) if retry_after else delay
-        )
+        wait = _retry_after_seconds(retry_after, delay) if retry_after else delay
+        throttle.back_off(max(wait, delay))
         delay *= 2
     raise AssertionError("unreachable: the last attempt always returns or raises")
 
