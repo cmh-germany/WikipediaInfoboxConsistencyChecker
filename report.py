@@ -2,6 +2,7 @@
 (no external dependencies such as CDN CSS/JS)."""
 
 import html
+import urllib.parse
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +24,22 @@ SEVERITY_ORDER = {"very high": 0, "high": 1, "medium": 2, "low": 3}
 ARTICLE_URL = "https://de.wikipedia.org/wiki/{}"
 TEMPLATE_DOC_URL = "https://de.wikipedia.org/wiki/Vorlage:Infobox_Leichtathlet"
 
+# Characters MediaWiki itself leaves unencoded in article paths (plus
+# `'`), so common titles like "Kurt Bendlin (Leichtathlet)" keep a
+# readable link; everything else, e.g. `?`, `%`, `&`, `#`, is encoded.
+_ARTICLE_URL_SAFE_CHARS = "/:(),;@$!*'"
+
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def article_url(title: str) -> str:
+    """The Wikipedia URL of an article. The title must be URL-encoded:
+    `?`, `%`, `&` and `#` are allowed in titles but would otherwise
+    start a query string, form an invalid escape or cut off the link.
+    The result is a plain URL -- escape it before inserting it into HTML."""
+    return ARTICLE_URL.format(
+        urllib.parse.quote(title.replace(" ", "_"), safe=_ARTICLE_URL_SAFE_CHARS)
+    )
 
 
 def _load_template(name: str) -> Template:
@@ -122,7 +138,7 @@ def _finding_row_html(
         rule_id=html.escape(finding.rule_id),
         rule_title=html.escape(finding.title),
         rule_sort=html.escape(finding.title.lower()),
-        url=ARTICLE_URL.format(html.escape(title.replace(" ", "_"))),
+        url=html.escape(article_url(title)),
         title=html.escape(title),
         article_sort=html.escape(title.lower()),
         params_html=params_html,
@@ -220,7 +236,7 @@ def generate_html_report(
         )
 
     scanned_items = "\n".join(
-        f'<li><a href="{ARTICLE_URL.format(html.escape(t.replace(" ", "_")))}" '
+        f'<li><a href="{html.escape(article_url(t))}" '
         f'target="_blank" rel="noopener">{html.escape(t)}</a>'
         + (
             f' <span class="n-findings">({len(findings)} finding(s))</span>'

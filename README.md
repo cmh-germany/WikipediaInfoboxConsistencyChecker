@@ -443,7 +443,7 @@ Each finding has:
 | `severity` | `very high`, `high`, `medium` or `low` |
 | `message` | What's wrong, as in the console and report |
 | `note` | Extra context (the report's Note column), or `null` |
-| `article`, `article_url` | Where the finding is (for a local draft: its file name, and `article_url` is `null`) |
+| `article`, `article_url` | Where the finding is (for a local draft: its file name, and `article_url` is `null`). The URL is percent-encoded, so e.g. `?`, `%`, `&` and umlauts appear as `%3F`, `%25`, `%26` and `%C3%A4` |
 | `params` | The infobox field(s) the finding is about |
 | `fingerprint` | The value `suppressions.json` uses to [suppress exactly this finding](#suppressing-false-positives) while its fields are unchanged |
 | `suppression` | `null`, or (in `suppressed_findings`) `reason` and `scope` (`finding`, `article` or `rule`) of the matching suppression |
