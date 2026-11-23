@@ -125,6 +125,9 @@ def test_extract_title_rejects_non_german_wikipedia_host(url):
     [
         "https://de.wikipedia.org/",
         "https://de.wikipedia.org/wiki/",
+        "https://de.wikipedia.org/wiki/_",
+        "https://de.wikipedia.org/wiki/___",
+        "https://de.wikipedia.org/w/index.php?title=__&oldid=123",
         "https://de.wikipedia.org/w/index.php?curid=123",
     ],
 )
@@ -617,6 +620,46 @@ def test_run_check_resolves_percent_encoded_url_before_fetching(monkeypatch):
     main.run_check("https://de.wikipedia.org/wiki/J%C3%BCrgen_Schult#Erfolge")
 
     assert seen["titles"] == ["Jürgen Schult"]
+
+
+def test_run_check_escapes_control_characters_from_decoded_url_title(
+    monkeypatch, capsys
+):
+    # A percent-encoded ESC/BEL must not reach the terminal raw once the
+    # title is decoded -- it could rewrite the terminal's title bar.
+    monkeypatch.setattr(main.fetch, "get_session", lambda: object())
+    monkeypatch.setattr(
+        main.fetch, "fetch_pages_content_and_categories", lambda session, titles: {}
+    )
+
+    result = main.run_check("https://de.wikipedia.org/wiki/%1B%5D0;pwned%07")
+
+    assert result == main.EXIT_ERROR
+    captured = capsys.readouterr()
+    for stream in (captured.out, captured.err):
+        assert "\x1b" not in stream
+        assert "\x07" not in stream
+    assert "\\x1b]0;pwned\\x07" in captured.out
+    assert "not found" in captured.out
+
+
+def test_run_check_no_infobox_message_escapes_control_characters(monkeypatch, capsys):
+    monkeypatch.setattr(main.fetch, "get_session", lambda: object())
+    monkeypatch.setattr(
+        main.fetch,
+        "fetch_pages_content_and_categories",
+        lambda session, titles: {
+            titles[0]: {"wikitext": "No infobox here.", "categories": []}
+        },
+    )
+
+    result = main.run_check("Bad\x1b]0;pwned\x07Title")
+
+    assert result == main.EXIT_ERROR
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+    assert "\x07" not in out
+    assert "No Infobox Leichtathlet embedding found" in out
 
 
 def test_run_check_foreign_url_returns_2_without_fetching(monkeypatch, capsys):
