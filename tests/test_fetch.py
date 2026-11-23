@@ -8,10 +8,13 @@ option (see https://github.com/cmh-germany/WikipediaInfoboxConsistencyChecker/is
 -- and request pacing plus maxlag handling (see
 https://github.com/cmh-germany/WikipediaInfoboxConsistencyChecker/issues/17)."""
 
+import datetime
+import email.utils
 import glob
 import json
 import os
 import time
+import types
 
 import pytest
 import requests
@@ -541,6 +544,71 @@ def test_too_many_requests_backs_off_via_throttle(throttle_calls):
     )
     fetch._api_query(session, {"action": "query"})
     assert throttle_calls["back_off"] == [3.0]
+
+
+FROZEN_NOW = datetime.datetime(2026, 10, 21, 7, 28, 0, tzinfo=datetime.UTC)
+
+
+@pytest.fixture
+def frozen_clock(monkeypatch):
+    """Pins the "now" that fetch uses to turn a Retry-After date into a
+    number of seconds, so date-based waits are exact and can't drift on
+    a slow machine."""
+
+    class _FrozenDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return FROZEN_NOW
+
+    monkeypatch.setattr(
+        fetch,
+        "datetime",
+        types.SimpleNamespace(datetime=_FrozenDatetime, UTC=datetime.UTC),
+    )
+
+
+def _http_date(seconds_from_now: float) -> str:
+    moment = FROZEN_NOW + datetime.timedelta(seconds=seconds_from_now)
+    return email.utils.format_datetime(moment, usegmt=True)
+
+
+def _back_off_after_one_429(throttle_calls, retry_after: str) -> list:
+    session = FakeSession(
+        [
+            FakeResponse(status_code=429, headers={"Retry-After": retry_after}),
+            FakeResponse(data={"query": {}}),
+        ]
+    )
+    fetch._api_query(session, {"action": "query"})
+    return throttle_calls["back_off"]
+
+
+def test_retry_after_http_date_backs_off_until_that_date(throttle_calls, frozen_clock):
+    """See https://github.com/cmh-germany/WikipediaInfoboxConsistencyChecker/issues/83:
+    RFC 9110 also allows Retry-After as an HTTP date, which used to
+    crash float() with a ValueError and abort the scan."""
+    assert _back_off_after_one_429(throttle_calls, _http_date(120)) == [120.0]
+
+
+@pytest.mark.parametrize("retry_after", ["past date", "0"])
+def test_retry_after_never_waits_less_than_exponential_delay(
+    throttle_calls, frozen_clock, retry_after
+):
+    """A date that is already past (or "0") must not cause an immediate
+    retry against a server that just said it is overloaded."""
+    if retry_after == "past date":
+        retry_after = _http_date(-3600)
+    assert _back_off_after_one_429(throttle_calls, retry_after) == [2.0]
+
+
+@pytest.mark.parametrize("retry_after", ["soon", "-5", "nan", "inf", "infinity", "1_0"])
+def test_invalid_retry_after_falls_back_to_exponential_delay_with_warning(
+    throttle_calls, capsys, retry_after
+):
+    """Values float() would accept but that aren't RFC 9110 delay-seconds
+    ("-5", "nan", "inf", "1_0") are treated like any unparseable value."""
+    assert _back_off_after_one_429(throttle_calls, retry_after) == [2.0]
+    assert repr(retry_after) in capsys.readouterr().err
 
 
 def test_persistent_server_error_raises_http_error(throttle_calls):
