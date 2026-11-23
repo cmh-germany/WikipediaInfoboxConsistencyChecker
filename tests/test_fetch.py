@@ -8,6 +8,8 @@ option (see https://github.com/cmh-germany/WikipediaInfoboxConsistencyChecker/is
 -- and request pacing plus maxlag handling (see
 https://github.com/cmh-germany/WikipediaInfoboxConsistencyChecker/issues/17)."""
 
+import datetime
+import email.utils
 import glob
 import json
 import os
@@ -541,6 +543,59 @@ def test_too_many_requests_backs_off_via_throttle(throttle_calls):
     )
     fetch._api_query(session, {"action": "query"})
     assert throttle_calls["back_off"] == [3.0]
+
+
+def _http_date(seconds_from_now: float) -> str:
+    moment = datetime.datetime.now(datetime.UTC) + datetime.timedelta(
+        seconds=seconds_from_now
+    )
+    return email.utils.format_datetime(moment, usegmt=True)
+
+
+def test_retry_after_http_date_backs_off_until_that_date(throttle_calls):
+    """See https://github.com/cmh-germany/WikipediaInfoboxConsistencyChecker/issues/83:
+    RFC 9110 also allows Retry-After as an HTTP date, which used to
+    crash float() with a ValueError and abort the scan."""
+    session = FakeSession(
+        [
+            FakeResponse(status_code=503, headers={"Retry-After": _http_date(120)}),
+            FakeResponse(data={"query": {}}),
+        ]
+    )
+
+    fetch._api_query(session, {"action": "query"})
+
+    [waited] = throttle_calls["back_off"]
+    assert 110 < waited <= 120
+
+
+def test_retry_after_http_date_in_the_past_does_not_wait_negative(throttle_calls):
+    session = FakeSession(
+        [
+            FakeResponse(status_code=429, headers={"Retry-After": _http_date(-3600)}),
+            FakeResponse(data={"query": {}}),
+        ]
+    )
+
+    fetch._api_query(session, {"action": "query"})
+
+    assert throttle_calls["back_off"] == [0.0]
+
+
+def test_unparseable_retry_after_falls_back_to_exponential_delay(
+    throttle_calls, capsys
+):
+    session = FakeSession(
+        [
+            FakeResponse(status_code=429, headers={"Retry-After": "soon"}),
+            FakeResponse(data={"query": {}}),
+        ]
+    )
+
+    fetch._api_query(session, {"action": "query"})
+
+    assert throttle_calls["back_off"] == [2.0]
+    assert "soon" in capsys.readouterr().err
 
 
 def test_persistent_server_error_raises_http_error(throttle_calls):
