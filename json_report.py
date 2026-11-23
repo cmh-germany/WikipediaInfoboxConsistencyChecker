@@ -45,7 +45,7 @@ def _article_url(title: str, run: RunInfo) -> str | None:
     """A local draft file has no Wikipedia article to link to."""
     if run.source == "local_file":
         return None
-    return report.ARTICLE_URL.format(title.replace(" ", "_"))
+    return report.article_url(title)
 
 
 def _suppression_scope(suppression: suppress.Suppression) -> str:

@@ -202,6 +202,30 @@ def test_local_file_has_no_article_urls():
     assert all(a["url"] is None for a in document["articles"])
 
 
+def test_article_urls_are_url_encoded():
+    # Regression for #85: ?, % and & used to end up unencoded.
+    title = "Wer wird Millionär? 100 % & mehr"
+    finding = Finding("missing_birthplace", rules.LOW, "No birthplace.", [])
+    view = SuppressionView()
+    view.add_article(title, {}, [finding], [])
+    document = json_report.build_document({title: [finding]}, view, _run())
+    expected = (
+        "https://de.wikipedia.org/wiki/Wer_wird_Million%C3%A4r%3F_100_%25_%26_mehr"
+    )
+    assert document["findings"][0]["article_url"] == expected
+    assert document["articles"][0]["url"] == expected
+
+
+def test_article_url_of_title_with_umlaut_and_parentheses():
+    finding = Finding("missing_birthplace", rules.LOW, "No birthplace.", [])
+    title = "Jürgen Straub (Leichtathlet)"
+    document = json_report.build_document({title: [finding]}, SuppressionView(), _run())
+    assert (
+        document["findings"][0]["article_url"]
+        == "https://de.wikipedia.org/wiki/J%C3%BCrgen_Straub_(Leichtathlet)"
+    )
+
+
 def test_ids_unique_for_findings_sharing_a_fingerprint():
     # Two competitions' mismatches are about the same field and thus
     # share a fingerprint, but must still get distinct ids.
