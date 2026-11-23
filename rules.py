@@ -186,7 +186,7 @@ def check_death_date_with_non_deceased_status(ctx):
         return [
             Finding(
                 "death_date_with_non_deceased_status",
-                HIGH,
+                LOW,
                 f"Death date (sterbedatum) is given, but status='{ctx.get('status')}' "
                 "(not 'v').",
                 params=["sterbedatum", "status"],
@@ -206,7 +206,7 @@ def check_status_deceased_without_death_date(ctx):
         return [
             Finding(
                 "status_deceased_without_death_date",
-                VERY_HIGH,
+                HIGH,
                 "status=v (deceased), but no death date (sterbedatum) is given.",
                 params=["status", "sterbedatum"],
             )
@@ -385,7 +385,7 @@ def check_national_squad_before_birth(ctx):
         return [
             Finding(
                 "national_squad_implausibly_young",
-                MEDIUM,
+                LOW,
                 f"National squad membership starting at approx. age "
                 f"{age_at_squad:.0f} seems implausibly young.",
                 params=["geburtstag", "nationalkader"],
@@ -412,7 +412,7 @@ def check_height_weight_plausibility(ctx):
             findings.append(
                 Finding(
                     f"{label}_comma_format",
-                    MEDIUM,
+                    VERY_HIGH,
                     f"{field_name}='{raw}' contains a comma -- per "
                     "documentation, numbers should be given without a comma.",
                     params=[field_name],
@@ -457,7 +457,7 @@ def check_height_weight_plausibility(ctx):
             findings.append(
                 Finding(
                     f"{label}_implausible",
-                    MEDIUM,
+                    HIGH,
                     f"{field_name}={value} {unit} is outside the plausible "
                     f"range ({lo}-{hi} {unit}).",
                     params=[field_name],
@@ -522,7 +522,7 @@ def check_nation_code(ctx):
             findings.append(
                 Finding(
                     "nation_code_unknown",
-                    MEDIUM,
+                    HIGH,
                     f"nation='{nation}' -- 'Vorlage:{code}' does not exist.",
                     params=["nation"],
                     note=(
@@ -556,7 +556,7 @@ def check_discipline_link(ctx):
         return [
             Finding(
                 "discipline_link_unknown",
-                LOW,
+                MEDIUM,
                 f"disziplin='{disziplin}' does not match an existing "
                 "article, the infobox will show it as plain unlinked text.",
                 params=["disziplin"],
@@ -642,7 +642,7 @@ def check_medal_year_before_birth(ctx):
         return [
             Finding(
                 "medal_implausibly_young",
-                MEDIUM,
+                LOW,
                 f"Earliest year found in the medals section "
                 f"({earliest_medal}) implies an age of only about "
                 f"{age_at_first_medal} years.",
