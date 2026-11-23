@@ -6,6 +6,8 @@ Results are cached locally in a JSON file so a repeated scan doesn't
 have to reload every article each time.
 """
 
+import datetime
+import email.utils
 import json
 import os
 import sys
@@ -59,6 +61,31 @@ def _is_maxlag_error(data: dict[str, Any]) -> bool:
     return isinstance(error, dict) and error.get("code") == "maxlag"
 
 
+def _retry_after_seconds(retry_after: str, fallback: float) -> float:
+    """Converts a Retry-After header value into seconds to wait. RFC 9110
+    allows either a number of seconds or an HTTP date; a date is turned
+    into the time remaining from now (0 if already past). A value in
+    neither form is a server quirk, not a reason to abort a long scan, so
+    it falls back to `fallback` with a warning instead of raising."""
+    try:
+        return max(0.0, float(retry_after))
+    except ValueError:
+        pass
+    try:
+        retry_at = email.utils.parsedate_to_datetime(retry_after)
+    except (TypeError, ValueError):
+        print(
+            f"Warning: could not understand Wikipedia's Retry-After value "
+            f"{retry_after!r} -- waiting {fallback:g} seconds instead.",
+            file=sys.stderr,
+        )
+        return fallback
+    if retry_at.tzinfo is None:
+        # HTTP dates are always GMT; a "-0000" offset parses as naive.
+        retry_at = retry_at.replace(tzinfo=datetime.UTC)
+    return max(0.0, (retry_at - datetime.datetime.now(datetime.UTC)).total_seconds())
+
+
 def _get_with_retry(session, params) -> dict[str, Any]:
     """GET and parse the JSON response, with backoff on 429 (Too Many
     Requests), 5xx errors, and MediaWiki "maxlag" errors -- the latter
@@ -86,7 +113,9 @@ def _get_with_retry(session, params) -> dict[str, Any]:
                     "-- please try again in a few minutes."
                 )
         retry_after = response.headers.get("Retry-After")
-        throttle.back_off(float(retry_after) if retry_after else delay)
+        throttle.back_off(
+            _retry_after_seconds(retry_after, delay) if retry_after else delay
+        )
         delay *= 2
     raise AssertionError("unreachable: the last attempt always returns or raises")
 
