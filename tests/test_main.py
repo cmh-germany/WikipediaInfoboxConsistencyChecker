@@ -70,6 +70,77 @@ def test_extract_title_from_plain_title_is_passthrough():
     assert main._extract_title_from_input("Usain Bolt") == "Usain Bolt"
 
 
+@pytest.mark.parametrize(
+    "plain",
+    [
+        "Jürgen Schult",
+        "J%C3%BCrgen_Schult",  # not a URL, so not decoded
+        "Usain Bolt#Erfolge",
+        "drafts/athlete.wikitext",
+    ],
+)
+def test_extract_title_leaves_non_url_input_unchanged(plain):
+    assert main._extract_title_from_input(plain) == plain
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        # Regression tests for issue #84: browser-copied URLs.
+        ("https://de.wikipedia.org/wiki/J%C3%BCrgen_Schult", "Jürgen Schult"),
+        ("https://de.wikipedia.org/wiki/Usain_Bolt#Erfolge", "Usain Bolt"),
+        ("https://de.wikipedia.org/wiki/Usain_Bolt?oldid=123", "Usain Bolt"),
+        (
+            "https://de.wikipedia.org/w/index.php?title=Usain_Bolt&oldid=123",
+            "Usain Bolt",
+        ),
+        (
+            "https://de.wikipedia.org/w/index.php?title=J%C3%BCrgen_Schult&action=edit",
+            "Jürgen Schult",
+        ),
+        ("https://de.m.wikipedia.org/wiki/Usain_Bolt", "Usain Bolt"),
+        ("https://DE.Wikipedia.org/wiki/Usain_Bolt", "Usain Bolt"),
+        ("https://de.wikipedia.org/wiki/AC/DC", "AC/DC"),
+    ],
+)
+def test_extract_title_from_browser_copied_url(url, expected):
+    assert main._extract_title_from_input(url) == expected
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://en.wikipedia.org/wiki/Usain_Bolt",
+        "https://example.com/wiki/Usain_Bolt",
+        "https://de.wikipedia.org.example.com/wiki/Usain_Bolt",
+    ],
+)
+def test_extract_title_rejects_non_german_wikipedia_host(url):
+    with pytest.raises(main.TargetUrlError, match="not a German Wikipedia address"):
+        main._extract_title_from_input(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://de.wikipedia.org/",
+        "https://de.wikipedia.org/wiki/",
+        "https://de.wikipedia.org/wiki/_",
+        "https://de.wikipedia.org/wiki/___",
+        "https://de.wikipedia.org/w/index.php?title=__&oldid=123",
+        "https://de.wikipedia.org/w/index.php?curid=123",
+    ],
+)
+def test_extract_title_rejects_url_without_article(url):
+    with pytest.raises(main.TargetUrlError, match="doesn't name an article"):
+        main._extract_title_from_input(url)
+
+
+def test_extract_title_rejects_malformed_url():
+    with pytest.raises(main.TargetUrlError, match="not a valid web address"):
+        main._extract_title_from_input("https://[de.wikipedia.org/wiki/Usain_Bolt")
+
+
 # ---------------------------------------------------------------------
 # _print_findings
 # ---------------------------------------------------------------------
@@ -533,6 +604,77 @@ def test_run_check_resolves_article_url_to_title_before_fetching(monkeypatch):
     main.run_check("https://de.wikipedia.org/wiki/Usain_Bolt")
 
     assert seen["titles"] == ["Usain Bolt"]
+
+
+def test_run_check_resolves_percent_encoded_url_before_fetching(monkeypatch):
+    # Regression test for issue #84.
+    seen = {}
+
+    def fake_fetch(session, titles):
+        seen["titles"] = titles
+        return {}
+
+    monkeypatch.setattr(main.fetch, "get_session", lambda: object())
+    monkeypatch.setattr(main.fetch, "fetch_pages_content_and_categories", fake_fetch)
+
+    main.run_check("https://de.wikipedia.org/wiki/J%C3%BCrgen_Schult#Erfolge")
+
+    assert seen["titles"] == ["Jürgen Schult"]
+
+
+def test_run_check_escapes_control_characters_from_decoded_url_title(
+    monkeypatch, capsys
+):
+    # A percent-encoded ESC/BEL must not reach the terminal raw once the
+    # title is decoded -- it could rewrite the terminal's title bar.
+    monkeypatch.setattr(main.fetch, "get_session", lambda: object())
+    monkeypatch.setattr(
+        main.fetch, "fetch_pages_content_and_categories", lambda session, titles: {}
+    )
+
+    result = main.run_check("https://de.wikipedia.org/wiki/%1B%5D0;pwned%07")
+
+    assert result == main.EXIT_ERROR
+    captured = capsys.readouterr()
+    for stream in (captured.out, captured.err):
+        assert "\x1b" not in stream
+        assert "\x07" not in stream
+    assert "\\x1b]0;pwned\\x07" in captured.out
+    assert "not found" in captured.out
+
+
+def test_run_check_no_infobox_message_escapes_control_characters(monkeypatch, capsys):
+    monkeypatch.setattr(main.fetch, "get_session", lambda: object())
+    monkeypatch.setattr(
+        main.fetch,
+        "fetch_pages_content_and_categories",
+        lambda session, titles: {
+            titles[0]: {"wikitext": "No infobox here.", "categories": []}
+        },
+    )
+
+    result = main.run_check("Bad\x1b]0;pwned\x07Title")
+
+    assert result == main.EXIT_ERROR
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+    assert "\x07" not in out
+    assert "No Infobox Leichtathlet embedding found" in out
+
+
+def test_run_check_foreign_url_returns_2_without_fetching(monkeypatch, capsys):
+    def fail_fetch(session, titles):
+        raise AssertionError("must not fetch a foreign URL's title")
+
+    monkeypatch.setattr(main.fetch, "get_session", lambda: object())
+    monkeypatch.setattr(main.fetch, "fetch_pages_content_and_categories", fail_fetch)
+
+    result = main.run_check("https://en.wikipedia.org/wiki/Usain_Bolt")
+
+    assert result == main.EXIT_ERROR
+    out = capsys.readouterr().out
+    assert "is not a German Wikipedia address" in out
+    assert "en.wikipedia.org" in out
 
 
 def test_run_check_article_not_found_returns_2_and_prints_message(monkeypatch, capsys):

@@ -34,6 +34,7 @@ import difflib
 import os
 import re
 import sys
+import urllib.parse
 import webbrowser
 from pathlib import Path
 from typing import Any
@@ -63,13 +64,56 @@ JSON_STDOUT = "-"
 # it can't be confused with any path the user actually typed.
 _JSON_DEFAULT: Any = object()
 
+# Path prefix of an article URL (https://de.wikipedia.org/wiki/Title).
+_WIKI_PATH_PREFIX = "/wiki/"
+# Hosts a --check URL may point to: German Wikipedia, desktop and mobile.
+# Every article is fetched from German Wikipedia (see fetch.py), so a URL
+# from anywhere else would silently check a different article, if any.
+_GERMAN_WIKIPEDIA_HOSTS = frozenset({"de.wikipedia.org", "de.m.wikipedia.org"})
 
-def _extract_title_from_input(user_input):
-    if user_input.startswith(("http://", "https://")):
-        # .../wiki/Article_Name -> Article Name
-        title = user_input.rsplit("/wiki/", 1)[-1]
-        return title.replace("_", " ")
-    return user_input
+
+class TargetUrlError(ValueError):
+    """A --check URL that can't be turned into a German Wikipedia
+    article title. Its message is meant for the console as-is."""
+
+
+def _extract_title_from_input(user_input: str) -> str:
+    """Turns a --check target into an article title. Plain titles pass
+    through unchanged; URLs are parsed the way a browser copies them:
+    percent-encoded (Chrome/Edge copy "J%C3%BCrgen_Schult"), possibly
+    with a #section or ?oldid=..., or in the /w/index.php?title=...
+    form of an old revision or edit link. Raises TargetUrlError for a
+    URL that isn't on German Wikipedia or names no article, since
+    looking it up anyway would only end in a confusing "not found"."""
+    if not user_input.startswith(("http://", "https://")):
+        return user_input
+    try:
+        url = urllib.parse.urlsplit(user_input)
+    except ValueError as exc:  # e.g. an unbalanced "[" in the host
+        raise TargetUrlError(
+            f"'{user_input}' is not a valid web address -- copy the "
+            "article's address from your browser's address bar again"
+        ) from exc
+    if url.hostname not in _GERMAN_WIKIPEDIA_HOSTS:
+        raise TargetUrlError(
+            f"'{user_input}' is not a German Wikipedia address (it points "
+            f"to '{url.hostname or ''}') -- this tool only checks articles "
+            "on de.wikipedia.org. Open the article on German Wikipedia and "
+            "copy its address, or give just the article title instead"
+        )
+    if url.path.startswith(_WIKI_PATH_PREFIX):
+        title = urllib.parse.unquote(url.path.removeprefix(_WIKI_PATH_PREFIX))
+    else:
+        title = urllib.parse.parse_qs(url.query).get("title", [""])[0]
+    title = title.replace("_", " ").strip()
+    if not title:
+        raise TargetUrlError(
+            f"'{user_input}' doesn't name an article -- open the article "
+            "itself and copy its address (it looks like "
+            "https://de.wikipedia.org/wiki/Usain_Bolt), or give just the "
+            "article title instead"
+        )
+    return title
 
 
 def _positive_int(value):
@@ -398,12 +442,17 @@ def run_check(
         categories = []
         source = "local_file"
     else:
-        title = _extract_title_from_input(target)
+        try:
+            title = _extract_title_from_input(target)
+        except TargetUrlError as e:
+            print(_sanitize_console_text(f"{e}."))
+            return EXIT_ERROR
         source = "wikipedia"
         data = fetch.fetch_pages_content_and_categories(session, [title])
         if title not in data:
             print(
-                f"Article '{title}' not found or has no retrievable wikitext revision."
+                f"Article '{_sanitize_console_text(title)}' not found or has "
+                "no retrievable wikitext revision."
             )
             return EXIT_ERROR
         wikitext = data[title]["wikitext"]
@@ -411,7 +460,10 @@ def run_check(
 
     params = parse.parse_infobox_params(wikitext)
     if params is None:
-        print(f"No Infobox Leichtathlet embedding found in '{target}'.")
+        print(
+            "No Infobox Leichtathlet embedding found in "
+            f"'{_sanitize_console_text(target)}'."
+        )
         return EXIT_ERROR
 
     # The existence lookups are the only costly part of a rule, so skip
