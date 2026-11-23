@@ -450,7 +450,8 @@ def run_check(
         data = fetch.fetch_pages_content_and_categories(session, [title])
         if title not in data:
             print(
-                f"Article '{title}' not found or has no retrievable wikitext revision."
+                f"Article '{_sanitize_console_text(title)}' not found or has "
+                "no retrievable wikitext revision."
             )
             return EXIT_ERROR
         wikitext = data[title]["wikitext"]
@@ -458,7 +459,10 @@ def run_check(
 
     params = parse.parse_infobox_params(wikitext)
     if params is None:
-        print(f"No Infobox Leichtathlet embedding found in '{target}'.")
+        print(
+            "No Infobox Leichtathlet embedding found in "
+            f"'{_sanitize_console_text(target)}'."
+        )
         return EXIT_ERROR
 
     # The existence lookups are the only costly part of a rule, so skip
