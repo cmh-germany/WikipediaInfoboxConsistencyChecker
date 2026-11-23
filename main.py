@@ -105,14 +105,15 @@ def _extract_title_from_input(user_input: str) -> str:
         title = urllib.parse.unquote(url.path.removeprefix(_WIKI_PATH_PREFIX))
     else:
         title = urllib.parse.parse_qs(url.query).get("title", [""])[0]
-    if not title.strip():
+    title = title.replace("_", " ").strip()
+    if not title:
         raise TargetUrlError(
             f"'{user_input}' doesn't name an article -- open the article "
             "itself and copy its address (it looks like "
             "https://de.wikipedia.org/wiki/Usain_Bolt), or give just the "
             "article title instead"
         )
-    return title.replace("_", " ")
+    return title
 
 
 def _positive_int(value):
