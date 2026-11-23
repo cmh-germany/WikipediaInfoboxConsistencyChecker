@@ -6,8 +6,10 @@ indirectly via test_main.py's --scan tests."""
 import json
 import re
 
+import pytest
+
 import suppress
-from report import SuppressionView, generate_html_report
+from report import SuppressionView, article_url, generate_html_report
 from rules import RULE_TITLES, Finding
 from suppress import Suppression, SuppressionStore
 
@@ -257,3 +259,39 @@ def test_add_article_keeps_params_only_for_articles_with_findings():
     view.add_article("Clean", PARAMS, [], [])
     view.add_article("Athlete", PARAMS, [FINDING], [])
     assert view.params_by_title == {"Athlete": PARAMS}
+
+
+# ---------------------------------------------------------------------
+# Article links
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("title", "url"),
+    [
+        # Regression for #85: ?, % and & used to end up unencoded.
+        (
+            "Wer wird Millionär? 100 % & mehr",
+            "https://de.wikipedia.org/wiki/Wer_wird_Million%C3%A4r%3F_100_%25_%26_mehr",
+        ),
+        (
+            "Kurt Bendlin (Leichtathlet)",
+            "https://de.wikipedia.org/wiki/Kurt_Bendlin_(Leichtathlet)",
+        ),
+        (
+            "Jürgen Straub (Leichtathlet, 1953)",
+            "https://de.wikipedia.org/wiki/J%C3%BCrgen_Straub_(Leichtathlet,_1953)",
+        ),
+        ("Ana-Maria Groza", "https://de.wikipedia.org/wiki/Ana-Maria_Groza"),
+    ],
+)
+def test_article_url_encodes_title(title, url):
+    assert article_url(title) == url
+
+
+def test_report_links_are_url_encoded(tmp_path):
+    title = "Wer wird Millionär? 100 % & mehr"
+    html = _report(tmp_path, {title: [FINDING]})
+    expected = 'href="https://de.wikipedia.org/wiki/Wer_wird_Million%C3%A4r%3F_100_%25_%26_mehr"'
+    # Once in the findings table, once in the list of scanned articles.
+    assert html.count(expected) == 2
