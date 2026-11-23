@@ -66,11 +66,13 @@ def _retry_after_seconds(retry_after: str, fallback: float) -> float:
     allows either a number of seconds or an HTTP date; a date is turned
     into the time remaining from now (0 if already past). A value in
     neither form is a server quirk, not a reason to abort a long scan, so
-    it falls back to `fallback` with a warning instead of raising."""
-    try:
-        return max(0.0, float(retry_after))
-    except ValueError:
-        pass
+    it falls back to `fallback` with a warning instead of raising.
+
+    The seconds form is matched as plain ASCII digits (RFC 9110's
+    delay-seconds) rather than via float(), which would also accept
+    "nan", "inf", "-5" or "1_0" and turn them into a nonsensical wait."""
+    if retry_after.isascii() and retry_after.isdigit():
+        return float(retry_after)
     try:
         retry_at = email.utils.parsedate_to_datetime(retry_after)
     except (TypeError, ValueError):
