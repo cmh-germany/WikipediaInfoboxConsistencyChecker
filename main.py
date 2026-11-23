@@ -66,6 +66,15 @@ _JSON_DEFAULT: Any = object()
 
 # Path prefix of an article URL (https://de.wikipedia.org/wiki/Title).
 _WIKI_PATH_PREFIX = "/wiki/"
+# Hosts a --check URL may point to: German Wikipedia, desktop and mobile.
+# Every article is fetched from German Wikipedia (see fetch.py), so a URL
+# from anywhere else would silently check a different article, if any.
+_GERMAN_WIKIPEDIA_HOSTS = frozenset({"de.wikipedia.org", "de.m.wikipedia.org"})
+
+
+class TargetUrlError(ValueError):
+    """A --check URL that can't be turned into a German Wikipedia
+    article title. Its message is meant for the console as-is."""
 
 
 def _extract_title_from_input(user_input: str) -> str:
@@ -73,14 +82,36 @@ def _extract_title_from_input(user_input: str) -> str:
     through unchanged; URLs are parsed the way a browser copies them:
     percent-encoded (Chrome/Edge copy "J%C3%BCrgen_Schult"), possibly
     with a #section or ?oldid=..., or in the /w/index.php?title=...
-    form of an old revision or edit link."""
+    form of an old revision or edit link. Raises TargetUrlError for a
+    URL that isn't on German Wikipedia or names no article, since
+    looking it up anyway would only end in a confusing "not found"."""
     if not user_input.startswith(("http://", "https://")):
         return user_input
-    url = urllib.parse.urlsplit(user_input)
+    try:
+        url = urllib.parse.urlsplit(user_input)
+    except ValueError as exc:  # e.g. an unbalanced "[" in the host
+        raise TargetUrlError(
+            f"'{user_input}' is not a valid web address -- copy the "
+            "article's address from your browser's address bar again"
+        ) from exc
+    if url.hostname not in _GERMAN_WIKIPEDIA_HOSTS:
+        raise TargetUrlError(
+            f"'{user_input}' is not a German Wikipedia address (it points "
+            f"to '{url.hostname or ''}') -- this tool only checks articles "
+            "on de.wikipedia.org. Open the article on German Wikipedia and "
+            "copy its address, or give just the article title instead"
+        )
     if url.path.startswith(_WIKI_PATH_PREFIX):
         title = urllib.parse.unquote(url.path.removeprefix(_WIKI_PATH_PREFIX))
     else:
         title = urllib.parse.parse_qs(url.query).get("title", [""])[0]
+    if not title.strip():
+        raise TargetUrlError(
+            f"'{user_input}' doesn't name an article -- open the article "
+            "itself and copy its address (it looks like "
+            "https://de.wikipedia.org/wiki/Usain_Bolt), or give just the "
+            "article title instead"
+        )
     return title.replace("_", " ")
 
 
@@ -410,7 +441,11 @@ def run_check(
         categories = []
         source = "local_file"
     else:
-        title = _extract_title_from_input(target)
+        try:
+            title = _extract_title_from_input(target)
+        except TargetUrlError as e:
+            print(_sanitize_console_text(f"{e}."))
+            return EXIT_ERROR
         source = "wikipedia"
         data = fetch.fetch_pages_content_and_categories(session, [title])
         if title not in data:
