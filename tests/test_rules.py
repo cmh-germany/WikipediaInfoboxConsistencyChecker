@@ -587,11 +587,29 @@ def test_finding_filter_on_real_findings(bolt_params):
     assert disabled.apply(findings) == []
 
 
+def _table_rule_ids(tree: ast.AST, name: str) -> set[str]:
+    """Rule ids a table-driven check emits via a loop variable `name`,
+    e.g. `for rule_id, ... in _FUTURE_DATE_CHECKS:`: the first column of
+    every row of the module-level table that loop iterates over."""
+    ids: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.For)
+            and isinstance(node.target, ast.Tuple)
+            and isinstance(node.target.elts[0], ast.Name)
+            and node.target.elts[0].id == name
+        ):
+            assert isinstance(node.iter, ast.Name)
+            ids.update(row[0] for row in getattr(rules, node.iter.id))
+    assert ids, f"no table loop binds {name!r}"
+    return ids
+
+
 def _emitted_rule_ids(tree: ast.AST | None = None) -> set[str]:
     """Collects every rule_id passed to a Finding(...) call in
     rules.py (or just in `tree`, e.g. one function), expanding the
     f"{label}_..." ids of check_height_weight_plausibility for both of
-    its labels."""
+    its labels and the table rows of table-driven checks."""
     if tree is None:
         tree = ast.parse(Path(rules.__file__).read_text(encoding="utf-8"))
     ids: set[str] = set()
@@ -605,6 +623,8 @@ def _emitted_rule_ids(tree: ast.AST | None = None) -> set[str]:
         first = node.args[0]
         if isinstance(first, ast.Constant):
             ids.add(str(first.value))
+        elif isinstance(first, ast.Name):
+            ids.update(_table_rule_ids(tree, first.id))
         else:
             assert isinstance(first, ast.JoinedStr)
             template = "".join(
