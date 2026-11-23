@@ -590,18 +590,43 @@ def test_finding_filter_on_real_findings(bolt_params):
 def _table_rule_ids(tree: ast.AST, name: str) -> set[str]:
     """Rule ids a table-driven check emits via a loop variable `name`,
     e.g. `for rule_id, ... in _FUTURE_DATE_CHECKS:`: the first column of
-    every row of the module-level table that loop iterates over."""
+    every row of the module-level table that loop iterates over. Fails
+    loudly on any other shape rather than guessing ids."""
     ids: set[str] = set()
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.For)
-            and isinstance(node.target, ast.Tuple)
-            and isinstance(node.target.elts[0], ast.Name)
-            and node.target.elts[0].id == name
+        if not (isinstance(node, ast.For) and isinstance(node.target, ast.Tuple)):
+            continue
+        names = [
+            elt.id if isinstance(elt, ast.Name) else None for elt in node.target.elts
+        ]
+        if name not in names:
+            continue
+        if names.index(name) != 0:
+            pytest.fail(
+                f"loop binds {name!r} at position {names.index(name)}, but "
+                "table-driven checks must take the rule id from column 0"
+            )
+        if not isinstance(node.iter, ast.Name):
+            pytest.fail(
+                f"loop binding {name!r} must iterate over a module-level table "
+                f"name, not {ast.unparse(node.iter)!r}"
+            )
+        table = getattr(rules, node.iter.id)
+        if not (
+            isinstance(table, tuple | list)
+            and all(isinstance(row, tuple) and row for row in table)
         ):
-            assert isinstance(node.iter, ast.Name)
-            ids.update(row[0] for row in getattr(rules, node.iter.id))
-    assert ids, f"no table loop binds {name!r}"
+            pytest.fail(f"rules.{node.iter.id} must be a tuple/list of tuples")
+        for row in table:
+            rule_id = row[0]
+            if not (isinstance(rule_id, str) and rule_id in rules.RULE_TITLES):
+                pytest.fail(
+                    f"rules.{node.iter.id} row {row!r} has no known rule id "
+                    "(a str in RULE_TITLES) in column 0"
+                )
+            ids.add(rule_id)
+    if not ids:
+        pytest.fail(f"no loop over a rules table binds {name!r}")
     return ids
 
 
