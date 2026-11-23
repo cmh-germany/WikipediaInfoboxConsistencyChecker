@@ -739,8 +739,9 @@ def run_all_checks(
     returns all findings, sorted from most to least severe. A check
     function is skipped entirely if every rule ID it can emit is in
     `skip_rules` (disabled or suppressed); one that only partly is
-    still runs, so callers must still filter its findings (see
-    FindingFilter.apply)."""
+    still runs, but its findings for skipped IDs are dropped here, so a
+    skipped ID behaves the same whether or not it shares a function
+    with other IDs."""
     ctx = Context(
         params=params,
         categories=categories or [],
@@ -748,10 +749,10 @@ def run_all_checks(
         nation_exists=nation_exists,
         discipline_exists=discipline_exists,
     )
-    findings = []
+    findings: list[Finding] = []
     for rule, rule_ids in CHECK_RULE_IDS.items():
         if rule_ids <= skip_rules:
             continue
-        findings.extend(rule(ctx))
+        findings.extend(f for f in rule(ctx) if f.rule_id not in skip_rules)
     findings.sort(key=lambda f: SEVERITY_ORDER[f.severity])
     return findings
