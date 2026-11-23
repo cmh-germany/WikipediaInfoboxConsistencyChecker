@@ -292,7 +292,7 @@ Check a single article or a local draft instead:
 
 ```sh
 python main.py --check "Usain Bolt"
-python main.py --check https://de.wikipedia.org/wiki/Usain_Bolt
+python main.py --check "https://de.wikipedia.org/wiki/Usain_Bolt"
 python main.py --check my_draft.wikitext
 ```
 
@@ -315,6 +315,15 @@ checks the article's current version, though. Only German Wikipedia
 URLs are accepted (`de.wikipedia.org`, or the mobile
 `de.m.wikipedia.org`); a URL from any other site, including other
 language editions such as `en.wikipedia.org`, is rejected with an error.
+
+Always put a URL in double quotes, as in the second example. Many
+article URLs contain characters that PowerShell, cmd and bash treat
+specially, such as `(`, `)` and `&`; unquoted, the shell mangles the URL
+before the tool even sees it:
+
+```sh
+python main.py --check "https://de.wikipedia.org/wiki/Jürgen_Straub_(Leichtathlet)"
+```
 
 The last variant checks a local file containing wikitext (e.g. a new infobox
 that hasn't been published yet) without any network access to the article
@@ -724,6 +733,14 @@ documented there keeps working.
 * **`Article '...' not found or has no retrievable wikitext revision.`**
   — double-check the title's spelling/capitalization, or use the full
   article URL instead: `python main.py --check https://de.wikipedia.org/wiki/...`.
+* **`The term 'Leichtathlet' is not recognized as the name of a cmdlet,
+  function, script file, or operable program`** (PowerShell; on a German
+  Windows: „Der Begriff „Leichtathlet“ wird nicht als Name eines Cmdlets
+  … erkannt“), or, in cmd or bash, an article "not found" under a
+  shortened title or a stray background job — the `--check` URL wasn't
+  in quotes, so the shell treated `(...)` or `&` in it as part of a
+  command and the tool never got the full URL. Put the URL in double
+  quotes: `python main.py --check "https://de.wikipedia.org/wiki/..."`.
 * **`'...' is not a German Wikipedia address`** — the URL you passed to
   `--check` points to another site, e.g. English Wikipedia
   (`en.wikipedia.org`). The tool only checks German Wikipedia articles:
