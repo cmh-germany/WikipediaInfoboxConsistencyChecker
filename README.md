@@ -307,7 +307,14 @@ the console.
 The article-title form must match the exact spelling/capitalization of the
 Wikipedia page title; if you're unsure, copying the full URL from your
 browser's address bar (second example) is the safer option since it
-sidesteps that matching entirely.
+sidesteps that matching entirely. Paste the URL exactly as your browser
+copies it: percent-encoded umlauts (`J%C3%BCrgen_Schult`), a section
+link (`...#Erfolge`) and a link to an old revision (`...?oldid=123` or
+`/w/index.php?title=Usain_Bolt&oldid=123`) all work. The tool always
+checks the article's current version, though. Only German Wikipedia
+URLs are accepted (`de.wikipedia.org`, or the mobile
+`de.m.wikipedia.org`); a URL from any other site, including other
+language editions such as `en.wikipedia.org`, is rejected with an error.
 
 The last variant checks a local file containing wikitext (e.g. a new infobox
 that hasn't been published yet) without any network access to the article
@@ -345,7 +352,7 @@ python main.py --scan --fail-on none                      # show everything, nev
 |---|---|
 | `0` | Run completed; no finding is left after `--fail-on`, `--disable-rule` and [suppressions](#suppressing-false-positives) (by default: no findings at all) |
 | `1` | Run completed, and at least one finding reached the `--fail-on` severity (findings of [disabled rules](#hiding-rules-or-low-severity-findings) and [suppressed findings](#suppressing-false-positives) never count, even with `--include-suppressed`) |
-| `2` | The run failed (article/infobox not found, draft file unreadable, report or [JSON file](#machine-readable-json-output) couldn't be written, `suppressions.json` invalid) or the command-line arguments were invalid (e.g. an unknown `--fail-on` severity or `--disable-rule` rule ID) |
+| `2` | The run failed (article/infobox not found, `--check` URL not an article on German Wikipedia, draft file unreadable, report or [JSON file](#machine-readable-json-output) couldn't be written, `suppressions.json` invalid) or the command-line arguments were invalid (e.g. an unknown `--fail-on` severity or `--disable-rule` rule ID) |
 
 If you're not using the tool in an automated setup, you can ignore the
 exit code entirely — a `1` does **not** mean the tool crashed. The
@@ -717,6 +724,14 @@ documented there keeps working.
 * **`Article '...' not found or has no retrievable wikitext revision.`**
   — double-check the title's spelling/capitalization, or use the full
   article URL instead: `python main.py --check https://de.wikipedia.org/wiki/...`.
+* **`'...' is not a German Wikipedia address`** — the URL you passed to
+  `--check` points to another site, e.g. English Wikipedia
+  (`en.wikipedia.org`). The tool only checks German Wikipedia articles:
+  open the article on `de.wikipedia.org` and copy that address, or pass
+  just the article title.
+* **`'...' doesn't name an article`** — the URL is on German Wikipedia
+  but isn't an article link (e.g. the main page). Open the article itself
+  and copy its address from the browser's address bar.
 * **The scan seems to hang** — a full `--scan` run fetches roughly 15,000
   articles at a deliberately throttled pace and can take several
   minutes, especially before `cache.json` is populated; this is expected.
