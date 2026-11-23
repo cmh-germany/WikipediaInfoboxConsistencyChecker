@@ -1750,6 +1750,26 @@ def test_run_check_whole_rule_suppression_skips_lookups(monkeypatch, tmp_path):
     assert lookups == [["Blitzlauf"]]
 
 
+def test_run_check_whole_rule_suppression_of_one_id_in_shared_check(tmp_path, capsys):
+    # death_date_in_future shares check_dates_in_future with
+    # birth_date_in_future, so that check still runs; the suppressed id
+    # must still be dropped as if it had its own function, not show up
+    # as a hidden suppressed finding.
+    path = tmp_path / "draft.wikitext"
+    path.write_text(
+        "{{Infobox Leichtathlet|status=v|geburtstag=1950-01-01"
+        "|sterbedatum=2999-01-01|geburtsort=Berlin}}",
+        encoding="utf-8",
+    )
+    _write_suppressions({"rule_id": "death_date_in_future"})
+
+    main.run_check(str(path))
+
+    out = capsys.readouterr().out
+    assert "death_date_in_future:" not in out
+    assert "suppressed finding(s) hidden" not in out
+
+
 def test_run_check_broken_suppressions_file_exits_2(tmp_path, capsys):
     main.suppress.default_path().write_text("{broken", encoding="utf-8")
 

@@ -269,64 +269,60 @@ def check_deceased_but_living_person_category(ctx):
 # ---------------------------------------------------------------------
 
 
-def check_death_date_before_birth_date(ctx):
+# (rule_id, severity, field, label) rows for the two table-driven date
+# checks below; `label` starts the finding's message, so adding a field
+# is a one-row change.
+_DATE_BEFORE_BIRTH_CHECKS: tuple[tuple[str, str, str, str], ...] = (
+    ("death_date_before_birth_date", VERY_HIGH, "sterbedatum", "Death date"),
+    ("career_end_before_birth_date", VERY_HIGH, "karriereende", "Career end"),
+)
+
+_FUTURE_DATE_CHECKS: tuple[tuple[str, str, str, str], ...] = (
+    ("birth_date_in_future", VERY_HIGH, "geburtstag", "Birth date"),
+    ("death_date_in_future", VERY_HIGH, "sterbedatum", "Death date"),
+)
+
+
+def check_dates_before_birth(ctx: Context) -> list[Finding]:
+    """Flags each _DATE_BEFORE_BIRTH_CHECKS field whose date lies
+    entirely before the birth date. Partial dates (e.g. a bare year) are
+    compared as ranges, so only a certain contradiction is reported."""
     birth = date_range(parse_date(ctx.get("geburtstag")))
-    death = date_range(parse_date(ctx.get("sterbedatum")))
-    if birth and death and death[1] < birth[0]:
-        return [
-            Finding(
-                "death_date_before_birth_date",
-                VERY_HIGH,
-                f"Death date ({ctx.get('sterbedatum')}) is before the "
-                f"birth date ({ctx.get('geburtstag')}).",
-                params=["geburtstag", "sterbedatum"],
+    if not birth:
+        return []
+    findings = []
+    for rule_id, severity, field_name, label in _DATE_BEFORE_BIRTH_CHECKS:
+        value = date_range(parse_date(ctx.get(field_name)))
+        if value and value[1] < birth[0]:
+            findings.append(
+                Finding(
+                    rule_id,
+                    severity,
+                    f"{label} ({ctx.get(field_name)}) is before the "
+                    f"birth date ({ctx.get('geburtstag')}).",
+                    params=["geburtstag", field_name],
+                )
             )
-        ]
-    return []
+    return findings
 
 
-def check_birth_date_in_future(ctx):
-    birth = date_range(parse_date(ctx.get("geburtstag")))
-    if birth and birth[0] > _today(ctx):
-        return [
-            Finding(
-                "birth_date_in_future",
-                VERY_HIGH,
-                f"Birth date ({ctx.get('geburtstag')}) is in the future.",
-                params=["geburtstag"],
+def check_dates_in_future(ctx: Context) -> list[Finding]:
+    """Flags each _FUTURE_DATE_CHECKS field whose date lies entirely
+    after today (ctx.today, if set, so tests are deterministic)."""
+    today = _today(ctx)
+    findings = []
+    for rule_id, severity, field_name, label in _FUTURE_DATE_CHECKS:
+        value = date_range(parse_date(ctx.get(field_name)))
+        if value and value[0] > today:
+            findings.append(
+                Finding(
+                    rule_id,
+                    severity,
+                    f"{label} ({ctx.get(field_name)}) is in the future.",
+                    params=[field_name],
+                )
             )
-        ]
-    return []
-
-
-def check_death_date_in_future(ctx):
-    death = date_range(parse_date(ctx.get("sterbedatum")))
-    if death and death[0] > _today(ctx):
-        return [
-            Finding(
-                "death_date_in_future",
-                VERY_HIGH,
-                f"Death date ({ctx.get('sterbedatum')}) is in the future.",
-                params=["sterbedatum"],
-            )
-        ]
-    return []
-
-
-def check_career_end_before_birth_date(ctx):
-    birth = date_range(parse_date(ctx.get("geburtstag")))
-    end = date_range(parse_date(ctx.get("karriereende")))
-    if birth and end and end[1] < birth[0]:
-        return [
-            Finding(
-                "career_end_before_birth_date",
-                VERY_HIGH,
-                f"Career end ({ctx.get('karriereende')}) is before the "
-                f"birth date ({ctx.get('geburtstag')}).",
-                params=["geburtstag", "karriereende"],
-            )
-        ]
-    return []
+    return findings
 
 
 def check_career_end_despite_active(ctx):
@@ -351,7 +347,7 @@ def check_implausible_age_at_death(ctx):
     min_age = (death[0] - birth[1]).days / 365.25
     max_age = (death[1] - birth[0]).days / 365.25
     if max_age < 0:
-        return []  # already reported by check_death_date_before_birth_date
+        return []  # already reported by check_dates_before_birth
     if min_age > 115 or max_age < 10:
         return [
             Finding(
@@ -706,10 +702,8 @@ CHECK_RULE_IDS: dict[Callable[[Context], list[Finding]], frozenset[str]] = {
     check_deceased_but_living_person_category: frozenset(
         {"deceased_but_living_person_category"}
     ),
-    check_death_date_before_birth_date: frozenset({"death_date_before_birth_date"}),
-    check_birth_date_in_future: frozenset({"birth_date_in_future"}),
-    check_death_date_in_future: frozenset({"death_date_in_future"}),
-    check_career_end_before_birth_date: frozenset({"career_end_before_birth_date"}),
+    check_dates_before_birth: frozenset(row[0] for row in _DATE_BEFORE_BIRTH_CHECKS),
+    check_dates_in_future: frozenset(row[0] for row in _FUTURE_DATE_CHECKS),
     check_career_end_despite_active: frozenset({"career_end_despite_active"}),
     check_implausible_age_at_death: frozenset({"implausible_age_at_death"}),
     check_national_squad_before_birth: frozenset(
@@ -745,8 +739,9 @@ def run_all_checks(
     returns all findings, sorted from most to least severe. A check
     function is skipped entirely if every rule ID it can emit is in
     `skip_rules` (disabled or suppressed); one that only partly is
-    still runs, so callers must still filter its findings (see
-    FindingFilter.apply)."""
+    still runs, but its findings for skipped IDs are dropped here, so a
+    skipped ID behaves the same whether or not it shares a function
+    with other IDs."""
     ctx = Context(
         params=params,
         categories=categories or [],
@@ -754,10 +749,10 @@ def run_all_checks(
         nation_exists=nation_exists,
         discipline_exists=discipline_exists,
     )
-    findings = []
+    findings: list[Finding] = []
     for rule, rule_ids in CHECK_RULE_IDS.items():
         if rule_ids <= skip_rules:
             continue
-        findings.extend(rule(ctx))
+        findings.extend(f for f in rule(ctx) if f.rule_id not in skip_rules)
     findings.sort(key=lambda f: SEVERITY_ORDER[f.severity])
     return findings
