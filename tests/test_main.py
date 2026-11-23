@@ -20,6 +20,7 @@ from typing import Any
 import pytest
 
 import main
+import report
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 MAIN_PY = os.path.abspath(main.__file__)
@@ -139,6 +140,24 @@ def test_extract_title_rejects_url_without_article(url):
 def test_extract_title_rejects_malformed_url():
     with pytest.raises(main.TargetUrlError, match="not a valid web address"):
         main._extract_title_from_input("https://[de.wikipedia.org/wiki/Usain_Bolt")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Jürgen Schult",
+        "Kurt Bendlin (Leichtathlet)",
+        "Jürgen Straub (Leichtathlet, 1953)",
+        "Wer wird Millionär?",
+        "100 % Leistung",
+        "Mann & Frau",
+        "Wer wird Millionär? 100 % & mehr, (Show)",
+    ],
+)
+def test_extract_title_round_trips_report_article_url(title):
+    # A link copied from the HTML report or the JSON output must lead
+    # --check back to the same article.
+    assert main._extract_title_from_input(report.article_url(title)) == title
 
 
 # ---------------------------------------------------------------------
