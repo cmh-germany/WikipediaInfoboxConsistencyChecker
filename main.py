@@ -34,6 +34,7 @@ import difflib
 import os
 import re
 import sys
+import urllib.parse
 import webbrowser
 from pathlib import Path
 from typing import Any
@@ -63,13 +64,24 @@ JSON_STDOUT = "-"
 # it can't be confused with any path the user actually typed.
 _JSON_DEFAULT: Any = object()
 
+# Path prefix of an article URL (https://de.wikipedia.org/wiki/Title).
+_WIKI_PATH_PREFIX = "/wiki/"
 
-def _extract_title_from_input(user_input):
-    if user_input.startswith(("http://", "https://")):
-        # .../wiki/Article_Name -> Article Name
-        title = user_input.rsplit("/wiki/", 1)[-1]
-        return title.replace("_", " ")
-    return user_input
+
+def _extract_title_from_input(user_input: str) -> str:
+    """Turns a --check target into an article title. Plain titles pass
+    through unchanged; URLs are parsed the way a browser copies them:
+    percent-encoded (Chrome/Edge copy "J%C3%BCrgen_Schult"), possibly
+    with a #section or ?oldid=..., or in the /w/index.php?title=...
+    form of an old revision or edit link."""
+    if not user_input.startswith(("http://", "https://")):
+        return user_input
+    url = urllib.parse.urlsplit(user_input)
+    if url.path.startswith(_WIKI_PATH_PREFIX):
+        title = urllib.parse.unquote(url.path.removeprefix(_WIKI_PATH_PREFIX))
+    else:
+        title = urllib.parse.parse_qs(url.query).get("title", [""])[0]
+    return title.replace("_", " ")
 
 
 def _positive_int(value):

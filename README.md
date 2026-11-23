@@ -307,7 +307,11 @@ the console.
 The article-title form must match the exact spelling/capitalization of the
 Wikipedia page title; if you're unsure, copying the full URL from your
 browser's address bar (second example) is the safer option since it
-sidesteps that matching entirely.
+sidesteps that matching entirely. Paste the URL exactly as your browser
+copies it: percent-encoded umlauts (`J%C3%BCrgen_Schult`), a section
+link (`...#Erfolge`) and a link to an old revision (`...?oldid=123` or
+`/w/index.php?title=Usain_Bolt&oldid=123`) all work. The tool always
+checks the article's current version, though.
 
 The last variant checks a local file containing wikitext (e.g. a new infobox
 that hasn't been published yet) without any network access to the article
